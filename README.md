@@ -16,4 +16,13 @@ Dimensions that can be varied:
 
 This implementation is compatible with DDP and FSDP.
 
- 
+Example Usage:
+
+# get mup_multipliers
+mup_multipliers = get_mup_multipliers(base_model, model)
+# use them to scale initial variance
+mup_init(model, mup_multipliers)
+
+# We build optimizer groups based off the mup_multipliers so that each group uses the correct scaled lr
+optimizer_param_groups = build_optimizer_param_groups(dist_model, mup_multipliers, **optimizer_kwargs)
+optimizer = optimizer_cls(optimizer_param_groups)

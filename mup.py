@@ -1,5 +1,7 @@
 from collections import defaultdict
+
 import torch
+
 
 def get_mup_multipliers(base_model, main_model):
     """
@@ -34,6 +36,10 @@ def _get_multiplier(base_dims, dims):
 
 
 def mup_init(model, mup_multipliers_dict):
+    for name, module in model.named_modules():
+        if isinstance(module, MuReadout):
+            module.width_mult = mup_multipliers_dict[f"{name}.weight"][0]
+            module._rescale_parameters()
     for name, param in model.named_parameters():
         if "layers" in name:
             name = ".".join(name.split(".")[2:])
@@ -80,7 +86,7 @@ def build_optimizer_param_groups(model, mup_multipliers_dict, decoupled_wd=False
 
 def _get_shapes(model):
     """
-    Returns a dictioanry of name:shape for each unique layer in a model.
+    Returns a dictionary of name:shape for each unique layer in a model.
     If a model comprises multiple 'blocks' (eg TransformerBlocks)
     we assume every block has the same dimensions
     """
@@ -107,11 +113,10 @@ class MuReadout(torch.nn.Linear):
     constant variance initialization for both weights and biases.
     """
 
-    def __init__(self, width_mult, in_features, out_features, bias=True):
+    def __init__(self, in_features, out_features, bias=True):
         super().__init__(in_features, out_features, bias=bias)
-        self.width_mult = width_mult
+        self.width_mult = None
         self._has_rescaled_params = False
-        self._rescale_parameters()
 
     def _rescale_parameters(self):
         """
@@ -119,12 +124,14 @@ class MuReadout(torch.nn.Linear):
         Warning: This method is NOT idempotent and should be called only once
         unless you know what you are doing.
         """
+        assert self.width_mult is not None, "Width multiplier not set - have you called mup_init on the model?"
         if self._has_rescaled_params:
             raise RuntimeError("`_rescale_parameters` has been called once before already.")
         if self.bias is not None:
-            self.bias.data *= self.width_mult ** 0.5
-        self.weight.data *= self.width_mult ** 0.5
+            self.bias.data *= self.width_mult**0.5
+        self.weight.data *= self.width_mult**0.5
         self._has_rescaled_params = True
 
     def forward(self, x):
+        assert self.width_mult is not None, "Width multiplier not set - have you called mup_init on the model?"
         return super().forward(x / self.width_mult)
