@@ -24,5 +24,6 @@ mup_multipliers = get_mup_multipliers(base_model, model)
 mup_init(model, mup_multipliers)
 
 # We build optimizer groups based off the mup_multipliers so that each group uses the correct scaled lr
+optimizer_cls = torch.optim.AdamW # can use any optimizer
 optimizer_param_groups = build_optimizer_param_groups(dist_model, mup_multipliers, **optimizer_kwargs)
 optimizer = optimizer_cls(optimizer_param_groups)
